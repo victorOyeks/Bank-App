@@ -2,8 +2,10 @@ package com.bank.bankdemo.service.serviceImpl;
 
 import com.bank.bankdemo.dto.*;
 import com.bank.bankdemo.entity.User;
+import com.bank.bankdemo.repository.TransactionRepository;
 import com.bank.bankdemo.repository.UserRepository;
 import com.bank.bankdemo.service.EmailService;
+import com.bank.bankdemo.service.TransactionService;
 import com.bank.bankdemo.service.UserService;
 import com.bank.bankdemo.utils.AccountUtils;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,7 @@ import java.util.UUID;
 public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final TransactionService transactionService;
 
     @Override
     public BankResponse createAccount(UserRequest userRequest) {
@@ -205,6 +208,36 @@ public class UserServiceImpl implements UserService {
         destinationAccount.setAccountBalance(destinationAccount.getAccountBalance().add(transferAmount));
         userRepository.save(sourceAccount);
         userRepository.save(destinationAccount);
+
+        //Send Email Alert
+        EmailDetails debitAlert = EmailDetails.builder()
+                .subject("DEBIT ALERT")
+                .recipient(sourceAccount.getEmail())
+                .messageBody("The sum of "+request.getAmount()+" has been debited from your account!. Your current balance is: "+sourceAccount.getAccountBalance())
+                .build();
+        emailService.sendEmailAlert(debitAlert);
+
+        //Save Transaction
+        TransactionDto transactionDto = TransactionDto.builder()
+                .transactionType("CREDIT")
+                .accountNumber(destinationAccount.getAccountNumber())
+                .amount(request.getAmount())
+                .build();
+        transactionService.saveTransaction(transactionDto);
+
+        EmailDetails creditAlert = EmailDetails.builder()
+                .subject("CREDIT ALERT")
+                .recipient(destinationAccount.getEmail())
+                .messageBody("The sum of "+request.getAmount()+" has been credited to your account!. Your current balance is: "+destinationAccount.getAccountBalance())
+                .build();
+        emailService.sendEmailAlert(creditAlert);
+
+        TransactionDto transactionDto2 = TransactionDto.builder()
+                .transactionType("DEBIT")
+                .accountNumber(sourceAccount.getAccountNumber())
+                .amount(request.getAmount())
+                .build();
+        transactionService.saveTransaction(transactionDto2);
 
         // Build and return the response
         return BankResponse.builder()
